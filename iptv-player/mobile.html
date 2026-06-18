@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>日本电视直播</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.10/hls.min.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body {
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+  background:#13131f; color:#e0e0e0; min-height:100vh;
+}
+.app { max-width:560px; margin:0 auto; }
+
+.topbar {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:14px 16px; background:#1a1a2e;
+}
+.topbar h1 { font-size:17px; font-weight:600; }
+.topbar .info { font-size:12px; color:#888; }
+.topbar .info strong { color:#a8b3e8; }
+
+/* 播放器吸顶 */
+.player-sticky {
+  position:sticky; top:0; z-index:10; background:#13131f;
+  padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.08);
+}
+.player-wrapper {
+  position:relative; width:100%; aspect-ratio:16/9; background:#000;
+  border-radius:10px; overflow:hidden;
+}
+#player { width:100%; height:100%; display:block; }
+.player-empty {
+  position:absolute; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; color:#555; gap:10px; font-size:14px;
+}
+.player-empty .icon { font-size:42px; }
+.now-bar { display:flex; align-items:center; gap:10px; padding:8px 4px 2px; }
+.now-bar img {
+  width:34px; height:34px; border-radius:6px; object-fit:contain;
+  background:#fff; padding:3px; flex-shrink:0;
+}
+.now-bar .nb-title { font-size:15px; font-weight:600; color:#fff;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* 控件 */
+.controls { padding:12px; }
+.search-box {
+  width:100%; padding:12px 14px; background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.1); border-radius:8px;
+  color:#e0e0e0; font-size:15px; margin-bottom:10px;
+}
+.search-box:focus { outline:none; border-color:rgba(102,126,234,0.6); }
+.search-box::placeholder { color:#666; }
+.tabs { display:flex; gap:8px; }
+.tab {
+  flex:1; padding:11px; text-align:center; font-size:14px; font-weight:600;
+  background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);
+  border-radius:8px; color:#999;
+}
+.tab.active { background:rgba(102,126,234,0.3); color:#fff; border-color:rgba(102,126,234,0.5); }
+
+/* 频道列表 */
+.channel-list { padding:0 12px 24px; }
+.list-label {
+  font-size:11px; text-transform:uppercase; letter-spacing:1px;
+  color:#666; padding:14px 4px 6px; font-weight:600;
+}
+.channel-item {
+  display:flex; align-items:center; gap:12px; padding:12px 10px;
+  border-radius:10px; min-height:60px; transition:background 0.15s;
+}
+.channel-item:active { background:rgba(255,255,255,0.1); }
+.channel-item.playing { background:rgba(102,126,234,0.25); }
+.channel-item img {
+  width:48px; height:48px; border-radius:8px; object-fit:contain;
+  background:#fff; padding:4px; flex-shrink:0;
+}
+.channel-item .ci-placeholder {
+  width:48px; height:48px; border-radius:8px; flex-shrink:0;
+  background:linear-gradient(135deg,rgba(102,126,234,0.3),rgba(118,75,162,0.3));
+  display:flex; align-items:center; justify-content:center; font-size:10px; color:#aaa;
+}
+.channel-item .ci-name { flex:1; min-width:0; font-size:15px; font-weight:500; color:#e0e0e0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fav-btn {
+  background:none; border:none; font-size:22px; padding:8px; flex-shrink:0;
+  width:44px; height:44px; display:flex; align-items:center; justify-content:center;
+}
+.no-channels { text-align:center; padding:40px 16px; color:#666; font-size:14px; }
+
+#fileInput { display:none; }
+.import-link { font-size:12px; color:#888; text-decoration:underline; background:none; border:none; padding:0; }
+.url-import { display:none; gap:8px; margin-top:10px; }
+.url-import.show { display:flex; }
+.url-import input {
+  flex:1; padding:11px 12px; background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#e0e0e0; font-size:14px;
+}
+.url-import button {
+  padding:11px 16px; border:1px solid rgba(102,126,234,0.5);
+  background:rgba(102,126,234,0.25); border-radius:8px; color:#a8b3e8; font-size:14px; font-weight:600;
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <h1>🇯🇵 日本电视</h1>
+    <span class="info">频道 <strong id="totalChannels">0</strong> · 收藏 <strong id="favoriteCount">0</strong></span>
+  </div>
+
+  <div class="player-sticky">
+    <div class="player-wrapper">
+      <video id="player" controls playsinline style="display:none;"></video>
+      <div class="player-empty" id="playerEmpty">
+        <div class="icon">📺</div>
+        <div>选择频道开始观看</div>
+      </div>
+    </div>
+    <div class="now-bar" id="nowBar" style="display:none;">
+      <img id="nbImg" onerror="this.style.display='none'">
+      <span class="nb-title" id="nbTitle"></span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <input type="text" class="search-box" id="search" placeholder="🔍 搜索频道...">
+    <div class="tabs">
+      <div class="tab active" data-tab="all">全部</div>
+      <div class="tab" data-tab="fav">❤️ 收藏</div>
+    </div>
+    <button class="import-link" id="importToggle" style="margin-top:12px;">导入其他 m3u8 源</button>
+    <div class="url-import" id="urlImport">
+      <button id="fileBtn">选择文件</button>
+      <input type="text" id="urlInput" placeholder="或粘贴 URL...">
+      <button id="loadUrlBtn">加载</button>
+    </div>
+    <input type="file" id="fileInput" accept=".m3u8,.txt">
+  </div>
+
+  <div class="channel-list" id="channelList"></div>
+</div>
+
+<script>
+const defaultChannels = [{"title": "NHK G", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd01&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/fAZ2BEZ.png", "category": "Japan TV", "id": "NHK G|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd01&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "NHK E", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd02&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/WxtftlO.png", "category": "Japan TV", "id": "NHK E|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd02&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "TV Tokyo", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd07&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/tDyxk0Y.png", "category": "Japan TV", "id": "TV Tokyo|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd07&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "TV Asahi", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd06&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/YCqB5Kj.png", "category": "Japan TV", "id": "TV Asahi|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd06&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Fuji TV", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd05&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/sEWDmMD.png", "category": "Japan TV", "id": "Fuji TV|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd05&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Nippon TV", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd03&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/IxD8V5X.png", "category": "Japan TV", "id": "Nippon TV|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd03&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "TBS", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd04&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/dUn2GRn.png", "category": "Japan TV", "id": "TBS|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd04&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Tokyo MX1", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd08&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/SwvuR00.png", "category": "Japan TV", "id": "Tokyo MX1|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gd08&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "NHK G Osaka", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx06&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/fAZ2BEZ.png", "category": "Japan TV", "id": "NHK G Osaka|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx06&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "TV Osaka", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx05&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/rUmrruq.png", "category": "Japan TV", "id": "TV Osaka|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx05&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "ABC", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx02&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Asahi_Broadcasting_Corporation_Logo.svg/2560px-Asahi_Broadcasting_Corporation_Logo.svg.png", "category": "Japan TV", "id": "ABC|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx02&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Kansai TV", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx03&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/WMNg5De.png", "category": "Japan TV", "id": "Kansai TV|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx03&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "MBS", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx01&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/RfrkGrd.png", "category": "Japan TV", "id": "MBS|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx01&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "YTV", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx04&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/ONbuWvo.png", "category": "Japan TV", "id": "YTV|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx04&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Sun TV", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx07&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://upload.wikimedia.org/wikipedia/commons/b/b9/SUN-TV_wordmark_2019.png", "category": "Japan TV", "id": "Sun TV|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=gx07&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "NHK BS", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs11&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/8qUZ2KR.png", "category": "Japan TV", "id": "NHK BS|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs11&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "NHK BSP4K", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs01&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/S47zgPe.png", "category": "Japan TV", "id": "NHK BSP4K|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs01&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "BS Tokyo", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs05&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/yJfA6ak.png", "category": "Japan TV", "id": "BS Tokyo|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs05&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "BS Asahi", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs03&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/scTEyhP.png", "category": "Japan TV", "id": "BS Asahi|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs03&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "BS Fuji", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs06&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/kauowCM.png", "category": "Japan TV", "id": "BS Fuji|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs06&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "BS Nippon TV", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs02&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/D8lhZCI.png", "category": "Japan TV", "id": "BS Nippon TV|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs02&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "BS-TBS", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs04&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/h20eGKq.png", "category": "Japan TV", "id": "BS-TBS|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs04&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "CNN J", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs16&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/cc/cnn-j-us-jp.png", "category": "Japan TV", "id": "CNN J|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs16&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "TBS News", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs11&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://upload.wikimedia.org/wikipedia/commons/b/b5/TBS_News_2020_logo.png", "category": "Japan TV", "id": "TBS News|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs11&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "NTV News24", "url": "https://n24-cdn-live.ntv.co.jp/ch01/index.m3u8", "logo": "https://i.imgur.com/lbdQtOq.png", "category": "Japan TV", "id": "NTV News24|https://n24-cdn-live.ntv.co.jp/ch01/index.m3u8"}, {"title": "BBC News", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs15&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.ccn-catv.co.jp/service/tv/img/logo/bbcworldnews.png", "category": "Japan TV", "id": "BBC News|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs15&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "WOWOW Prime", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs12&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat.com/logo/tv/ww/wowow_prime.png", "category": "Japan TV", "id": "WOWOW Prime|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs12&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "WOWOW Live", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs20&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/ww/wowow_live.png", "category": "Japan TV", "id": "WOWOW Live|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs20&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "WOWOW Cinema", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs07&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/ww/wowow_cinema.png", "category": "Japan TV", "id": "WOWOW Cinema|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs07&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Star 1", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs08&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/hbTMMJf.png", "category": "Japan TV", "id": "Star 1|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs08&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Star 2", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs27&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/hbTMMJf.png", "category": "Japan TV", "id": "Star 2|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs27&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Star 3", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs28&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/hbTMMJf.png", "category": "Japan TV", "id": "Star 3|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs28&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "JSPORTS 1", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs18&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/J_Sports_Logo.svg/2560px-J_Sports_Logo.svg.png", "category": "Japan TV", "id": "JSPORTS 1|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs18&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "JSPORTS 2", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs19&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/J_Sports_Logo.svg/2560px-J_Sports_Logo.svg.png", "category": "Japan TV", "id": "JSPORTS 2|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs19&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "JSPORTS 3", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs21&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/J_Sports_Logo.svg/2560px-J_Sports_Logo.svg.png", "category": "Japan TV", "id": "JSPORTS 3|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs21&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "JSPORTS 4", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs22&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/J_Sports_Logo.svg/2560px-J_Sports_Logo.svg.png", "category": "Japan TV", "id": "JSPORTS 4|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs22&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "GAORA SPORTS", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs17&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/gg/gaora-sportspng-jp.png", "category": "Japan TV", "id": "GAORA SPORTS|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs17&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Golf Network", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs03&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/KARkvfS.png", "category": "Japan TV", "id": "Golf Network|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs03&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "BS Shochiku Tokyu", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs31&isp=10&bind=0&uin=159413&playseek=0", "logo": "http://asian.ynnhcwdf.com:9083/query/s/l6kArOPkx3rCe-BY5PGk5Q==.jpg?type=live&thumbnail=thumbnail_small.jpg", "category": "Japan TV", "id": "BS Shochiku Tokyu|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs31&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Animal Planet", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs24&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/ff/fuji_tv_next.png", "category": "Japan TV", "id": "Animal Planet|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs24&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Nippon G+", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs02&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/nn/ntv-g-plus-jp.png", "category": "Japan TV", "id": "Nippon G+|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs02&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Channel Ginga", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs29&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/cc/channel_ginga.png", "category": "Japan TV", "id": "Channel Ginga|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs29&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Home Drama Channel", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs05&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/hh/home-drama-channelpng-jp.png", "category": "Japan TV", "id": "Home Drama Channel|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs05&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Family Gekijo", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs20&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/ff/family_gekijyo_jp.png", "category": "Japan TV", "id": "Family Gekijo|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs20&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Eisei Gekijo", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs22&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/ee/eisei_gekijo.png", "category": "Japan TV", "id": "Eisei Gekijo|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs22&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Jidaigeki Senmon", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs04&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/jj/jidaigeki.png", "category": "Japan TV", "id": "Jidaigeki Senmon|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs04&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Nihon Eiga Senmon", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs23&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/PzwtC9K.png", "category": "Japan TV", "id": "Nihon Eiga Senmon|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs23&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "LaLa TV", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs19&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/ll/lala_tv.png", "category": "Japan TV", "id": "LaLa TV|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs19&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Mondo TV", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs21&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/mm/mondo_tv_jp.png", "category": "Japan TV", "id": "Mondo TV|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs21&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Movie Plus", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs14&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/mm/movie_plus_jp.png", "category": "Japan TV", "id": "Movie Plus|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs14&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Tabi Channel", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs12&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/tt/tabi_channel.png", "category": "Japan TV", "id": "Tabi Channel|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs12&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Toei Channel", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs27&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/tt/toei_channel.png", "category": "Japan TV", "id": "Toei Channel|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs27&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Fuji TV NEXT", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs26&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/ff/fuji_tv_next.png", "category": "Japan TV", "id": "Fuji TV NEXT|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs26&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Kids Station", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs07&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/kk/kidsstation.png", "category": "Japan TV", "id": "Kids Station|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs07&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Animax", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs15&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/zpi6mQ3.png", "category": "Japan TV", "id": "Animax|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs15&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Cartoon Network", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs25&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/kk/kayo-pops-jp.png", "category": "Japan TV", "id": "Cartoon Network|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs25&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Disney Channel", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs24&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://i.imgur.com/VSq7b5E.jpeg", "category": "Japan TV", "id": "Disney Channel|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=bs24&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Disney Junior", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs23&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/dd/disney_junior_us.png", "category": "Japan TV", "id": "Disney Junior|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs23&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Takarazuka Sky Stage", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs28&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/tt/takarazuka_sky_stage.png", "category": "Japan TV", "id": "Takarazuka Sky Stage|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs28&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Kayo Pops", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs13&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/kk/kayo-pops-jp.png", "category": "Japan TV", "id": "Kayo Pops|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs13&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "Music Japan TV", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs06&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://www.lyngsat-logo.com/logo/tv/mm/music_japan_tv.png", "category": "Japan TV", "id": "Music Japan TV|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs06&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "MTV Japan", "url": "http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs18&isp=10&bind=0&uin=159413&playseek=0", "logo": "https://tvguide.myjcom.jp/monomedia/ch_logo/jcom/logo-65406-150-400x400.png", "category": "Japan TV", "id": "MTV Japan|http://cdns.jp-primehome.com:8000/zhongying/live/playlist.m3u8?cid=cs18&isp=10&bind=0&uin=159413&playseek=0"}, {"title": "NHK BSP", "url": "http://203.162.235.41:25104", "logo": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/NHK_BS%E3%83%97%E3%83%AC%E3%83%9F%E3%82%A2%E3%83%A0_%E6%96%B0%E3%83%AD%E3%82%B4.png/800px-NHK_BS%E3%83%97%E3%83%AC%E3%83%9F%E3%82%A2%E3%83%A0_%E6%96%B0%E3%83%AD%E3%82%B4.png", "category": "Japan TV", "id": "NHK BSP|http://203.162.235.41:25104"}];
+let allChannels = [];
+let favorites = new Set();
+let currentTab = 'all';
+let currentPlayingId = null;
+let hls = null;
+const video = document.getElementById('player');
+
+function loadFavorites() {
+  const saved = localStorage.getItem('jp_tv_favorites');
+  if (saved) favorites = new Set(JSON.parse(saved));
+  updateStats();
+}
+function saveFavorites() {
+  localStorage.setItem('jp_tv_favorites', JSON.stringify([...favorites]));
+  updateStats();
+}
+function updateStats() {
+  document.getElementById('totalChannels').textContent = allChannels.length;
+  document.getElementById('favoriteCount').textContent = favorites.size;
+}
+
+function parseM3U(content) {
+  content = content.replace(/\f/g, '');
+  const parts = content.split(/(?=#EXTINF:)/);
+  const channels = [];
+  for (let part of parts) {
+    if (!part.trim().startsWith('#EXTINF:')) continue;
+    const block = part.trim();
+    const logoMatch = block.match(/tvg-logo="\s*([^"]*?)\s*"/s);
+    const logo = logoMatch ? logoMatch[1].replace(/\n/g,'').trim() : '';
+    const catMatch = block.match(/group-title="([^"]*)"/);
+    const category = catMatch ? catMatch[1].trim() : '其他';
+    const urls = block.match(/https?:\/\/[^\s"]+/g) || [];
+    let streamUrl = null;
+    for (let u of urls) {
+      if (u === logo) continue;
+      if (/\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(u)) continue;
+      if (/\.m3u8|chunks|chunklist|playlist|index|\/live\/|\.stream|\/HLS\/|:1935|:8000|:9083|:25104|:9443/i.test(u)) { streamUrl = u; break; }
+    }
+    if (!streamUrl) {
+      for (let u of urls) {
+        if (u === logo) continue;
+        if (/\.(png|jpg|jpeg|gif|webp|svg)(\?|$)/i.test(u)) continue;
+        if (/^https?:\/\/[^\/]+\/?$/.test(u)) continue;
+        streamUrl = u; break;
+      }
+    }
+    if (!streamUrl) continue;
+    const commaIdx = block.indexOf(',');
+    if (commaIdx === -1) continue;
+    let nameStr = block.slice(commaIdx+1).split('#EXTVLCOPT')[0].split(/https?:\/\//)[0];
+    const name = nameStr.split(/\s+/).filter(Boolean).join(' ').trim() || '未知频道';
+    channels.push({ id: name+'|'+streamUrl, title:name, url:streamUrl, logo, category });
+  }
+  return channels;
+}
+
+function playChannel(ch) {
+  currentPlayingId = ch.id;
+  document.getElementById('playerEmpty').style.display = 'none';
+  video.style.display = 'block';
+  const nb = document.getElementById('nowBar');
+  nb.style.display = 'flex';
+  const img = document.getElementById('nbImg');
+  if (ch.logo) { img.src = ch.logo; img.style.display='block'; } else { img.style.display='none'; }
+  document.getElementById('nbTitle').textContent = ch.title;
+  if (Hls.isSupported()) {
+    if (hls) hls.destroy();
+    hls = new Hls();
+    hls.loadSource(ch.url);
+    hls.attachMedia(video);
+    video.play().catch(()=>{});
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    video.src = ch.url;
+    video.play().catch(()=>{});
+  }
+  render();
+  window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+function toggleFav(id, e) {
+  e.stopPropagation();
+  if (favorites.has(id)) favorites.delete(id); else favorites.add(id);
+  saveFavorites();
+  render();
+}
+
+function makeItem(ch) {
+  const isFav = favorites.has(ch.id);
+  const isPlaying = ch.id === currentPlayingId;
+  const item = document.createElement('div');
+  item.className = 'channel-item' + (isPlaying ? ' playing' : '');
+  item.innerHTML =
+    (ch.logo ? '<img src="'+ch.logo+'" onerror="this.outerHTML=\'<div class=&quot;ci-placeholder&quot;>'+ch.title.slice(0,4)+'</div>\'">'
+             : '<div class="ci-placeholder">'+ch.title.slice(0,4)+'</div>') +
+    '<span class="ci-name">'+ch.title+'</span>' +
+    '<button class="fav-btn">'+(isFav?'❤️':'🤍')+'</button>';
+  item.querySelector('.fav-btn').addEventListener('click', e => toggleFav(ch.id, e));
+  item.addEventListener('click', () => playChannel(ch));
+  return item;
+}
+
+function render() {
+  const search = document.getElementById('search').value.toLowerCase();
+  const list = document.getElementById('channelList');
+  list.innerHTML = '';
+  let pool = allChannels.filter(ch => ch.title.toLowerCase().includes(search));
+  if (currentTab === 'fav') pool = pool.filter(ch => favorites.has(ch.id));
+  if (pool.length === 0) {
+    list.innerHTML = '<div class="no-channels">'+(currentTab==='fav'?'还没有收藏频道':'未找到频道')+'</div>';
+    return;
+  }
+  const favs = pool.filter(ch => favorites.has(ch.id));
+  const rest = pool.filter(ch => !favorites.has(ch.id));
+  if (currentTab === 'all' && favs.length > 0) {
+    const l1 = document.createElement('div'); l1.className='list-label'; l1.textContent='❤️ 收藏';
+    list.appendChild(l1);
+    favs.forEach(ch => list.appendChild(makeItem(ch)));
+    const l2 = document.createElement('div'); l2.className='list-label'; l2.textContent='全部频道';
+    list.appendChild(l2);
+    rest.forEach(ch => list.appendChild(makeItem(ch)));
+  } else {
+    pool.forEach(ch => list.appendChild(makeItem(ch)));
+  }
+}
+
+function importChannels(content) {
+  const newCh = parseM3U(content);
+  if (newCh.length > 0) {
+    const existing = new Set(allChannels.map(c=>c.id));
+    const added = newCh.filter(c => !existing.has(c.id));
+    allChannels = [...allChannels, ...added];
+    updateStats(); render();
+    document.getElementById('urlInput').value = '';
+    alert('已导入 '+added.length+' 个新频道');
+  } else { alert('未找到有效频道'); }
+}
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    currentTab = t.dataset.tab; render();
+  });
+});
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('importToggle').addEventListener('click', () => {
+  document.getElementById('urlImport').classList.toggle('show');
+});
+document.getElementById('fileBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if (f) { const r = new FileReader(); r.onload = ev=>importChannels(ev.target.result); r.readAsText(f); }
+});
+document.getElementById('loadUrlBtn').addEventListener('click', async ()=>{
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) { alert('请输入 URL'); return; }
+  const btn = document.getElementById('loadUrlBtn');
+  btn.disabled = true; btn.textContent = '...';
+  try { const res = await fetch(url); importChannels(await res.text()); }
+  catch(err) { alert('加载失败: '+err.message); }
+  finally { btn.disabled = false; btn.textContent = '加载'; }
+});
+
+loadFavorites();
+allChannels = defaultChannels;
+updateStats();
+render();
+</script>
+</body>
+</html>

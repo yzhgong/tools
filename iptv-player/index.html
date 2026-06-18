@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IPTV 直播播放器</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  background:linear-gradient(135deg,#0f0f1e 0%,#1a1a2e 100%);
+  color:#e0e0e0; min-height:100vh; padding:40px 20px;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+}
+.wrap { max-width:900px; width:100%; }
+h1 { font-size:28px; font-weight:700; text-align:center; margin-bottom:8px; }
+.sub { text-align:center; color:#888; font-size:14px; margin-bottom:36px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:18px; }
+.card {
+  display:block; text-decoration:none; color:inherit;
+  background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1);
+  border-radius:14px; padding:24px; transition:all 0.25s;
+}
+.card:hover {
+  background:rgba(255,255,255,0.08); border-color:rgba(102,126,234,0.5);
+  transform:translateY(-4px); box-shadow:0 10px 30px rgba(0,0,0,0.3);
+}
+.card .icon { font-size:40px; margin-bottom:14px; }
+.card .title { font-size:18px; font-weight:600; color:#fff; margin-bottom:8px; }
+.card .desc { font-size:13px; color:#999; line-height:1.6; }
+.foot { text-align:center; color:#555; font-size:12px; margin-top:36px; line-height:1.8; }
+.foot a { color:#a8b3e8; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📺 IPTV 直播播放器</h1>
+  <p class="sub">本地、无依赖、即点即开的 HLS 直播播放器</p>
+  <div class="grid">
+    <a class="card" href="japan-tv.html">
+      <div class="icon">🇯🇵</div>
+      <div class="title">日本电视</div>
+      <div class="desc">63 个日本频道，搜索、收藏、导入、右键复制 yt-dlp 下载命令。桌面端。</div>
+    </a>
+    <a class="card" href="explore.html">
+      <div class="icon">🌐</div>
+      <div class="title">探索全球</div>
+      <div class="desc">加载 iptv-org 全球列表，搜索试播、收藏能用的频道。桌面端。</div>
+    </a>
+    <a class="card" href="mobile.html">
+      <div class="icon">📱</div>
+      <div class="title">手机版</div>
+      <div class="desc">竖屏单列、播放器吸顶、触摸友好。日本频道，适合手机。</div>
+    </a>
+  </div>
+  <p class="foot">
+    全部为单文件、纯前端，直接用浏览器打开即可。<br>
+    频道数据来自 <a href="https://github.com/iptv-org/iptv" target="_blank" rel="noopener">iptv-org</a> 等公开来源。
+  </p>
+</div>
+</body>
+</html>
